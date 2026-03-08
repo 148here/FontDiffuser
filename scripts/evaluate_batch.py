@@ -79,6 +79,7 @@ def build_tasks(data_root, style_char):
     """
     Build list of (content_name, content_path, style_name, style_path, gt_path).
     Skip samples without GT.
+    Pre-caches per-style file sets to avoid repeated os.listdir (was 600k+ calls, now 30).
     """
     content_dir = os.path.join(data_root, "ContentImage")
     target_dir = os.path.join(data_root, "TargetImage")
@@ -88,30 +89,51 @@ def build_tasks(data_root, style_char):
     if not contents or not styles:
         return []
 
+    # Pre-cache: for each style, one listdir -> set of filenames + list for random
+    # Avoids 629k listdir/isfile calls, down to 30 listdirs
+    style_cache = {}
+    for style_name in styles:
+        style_dir = os.path.join(target_dir, style_name)
+        try:
+            all_files = os.listdir(style_dir)
+        except OSError:
+            style_cache[style_name] = (set(), [])
+            continue
+        img_files = [f for f in all_files if Path(f).suffix.lower() in IMAGE_EXTENSIONS]
+        style_cache[style_name] = (set(img_files), img_files)
+    print("[DEBUG] Style dirs cached (1 listdir per style)")
+
+    def _path_in_set(style_dir, style_name, name, extensions=(".png", ".jpg")):
+        s, _ = style_cache.get(style_name, (set(), []))
+        for ext in extensions:
+            fn = f"{style_name}+{name}{ext}"
+            if fn in s:
+                return os.path.join(style_dir, fn)
+        return None
+
     tasks = []
     total_pairs = len(contents) * len(styles)
     checked = 0
     for content_name, content_path in contents:
         for style_name in styles:
             checked += 1
-            if checked % 10000 == 0 or checked == total_pairs:
+            if checked % 100000 == 0 or checked == total_pairs:
                 print(f"[DEBUG] build_tasks progress: {checked}/{total_pairs} pairs checked, {len(tasks)} valid so far")
             style_dir = os.path.join(target_dir, style_name)
-            gt_path = find_gt_path(style_dir, style_name, content_name)
+            gt_path = _path_in_set(style_dir, style_name, content_name)
             if gt_path is None:
                 continue  # Skip without GT
 
             if style_char is not None:
-                style_path = find_style_char_path(style_dir, style_name, style_char)
+                style_path = _path_in_set(style_dir, style_name, style_char)
                 if style_path is None:
-                    continue  # Skip if this style has no char
-            else:
-                # Random pick one image from style dir (excluding gt if we want diff ref)
-                files = [f for f in os.listdir(style_dir)
-                         if Path(f).suffix.lower() in IMAGE_EXTENSIONS]
-                if not files:
                     continue
-                style_path = os.path.join(style_dir, random.choice(files))
+            else:
+                _, img_list = style_cache[style_name]
+                if not img_list:
+                    continue
+                fn = random.choice(img_list)
+                style_path = os.path.join(style_dir, fn)
 
             tasks.append((content_name, content_path, style_name, style_path, gt_path))
 
