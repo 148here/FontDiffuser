@@ -55,10 +55,16 @@ class FontDiffuserDPMPipeline():
         method="multistep",
         correcting_x0_fn=None,
         generator=None,
+        content_scales=None,
+        style_scales=None,
     ):
         model_kwargs = {}
         model_kwargs["version"] = self.version
         model_kwargs["content_encoder_downsample_size"] = content_encoder_downsample_size
+        if content_scales is not None:
+            model_kwargs["content_scales"] = content_scales
+        if style_scales is not None:
+            model_kwargs["style_scales"] = style_scales
 
         cond = []
         cond.append(content_images)

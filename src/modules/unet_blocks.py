@@ -192,27 +192,34 @@ class UNetMidMCABlock2D(nn.Module):
         self.resnets = nn.ModuleList(resnets)
 
     def forward(
-        self, 
-        hidden_states, 
-        temb=None, 
+        self,
+        hidden_states,
+        temb=None,
         encoder_hidden_states=None,
         index=None,
+        c_scale=None,
+        s_scale=None,
     ):
+        c_scale = 1.0 if c_scale is None else c_scale
+        s_scale = 1.0 if s_scale is None else s_scale
+
         hidden_states = self.resnets[0](hidden_states, temb)
         for content_attn, style_attn, resnet in zip(self.content_attentions, self.style_attentions, self.resnets[1:]):
-            
-            # content
-            current_content_feature = encoder_hidden_states[1][index]
-            hidden_states = content_attn(hidden_states, current_content_feature)
-            
-            # t_embed
+            # content injection (c_scale=0: skip)
+            if c_scale != 0:
+                current_content_feature = encoder_hidden_states[1][index] * c_scale
+                hidden_states = content_attn(hidden_states, current_content_feature)
+            # else: skip content injection
+
             hidden_states = resnet(hidden_states, temb)
 
-            # style
-            current_style_feature = encoder_hidden_states[0]
-            batch_size, channel, height, width = current_style_feature.shape
-            current_style_feature = current_style_feature.permute(0, 2, 3, 1).reshape(batch_size, height*width, channel)
-            hidden_states = style_attn(hidden_states, context=current_style_feature)
+            # style injection (s_scale=0: skip)
+            if s_scale != 0:
+                current_style_feature = encoder_hidden_states[0]
+                batch_size, channel, height, width = current_style_feature.shape
+                current_style_feature = current_style_feature.permute(0, 2, 3, 1).reshape(batch_size, height * width, channel) * s_scale
+                hidden_states = style_attn(hidden_states, context=current_style_feature)
+            # else: skip style injection
 
         return hidden_states
 
@@ -305,28 +312,35 @@ class MCADownBlock2D(nn.Module):
         self.gradient_checkpointing = False
 
     def forward(
-        self, 
-        hidden_states, 
+        self,
+        hidden_states,
         index,
-        temb=None, 
-        encoder_hidden_states=None
+        temb=None,
+        encoder_hidden_states=None,
+        c_scale=None,
+        s_scale=None,
     ):
+        c_scale = 1.0 if c_scale is None else c_scale
+        s_scale = 1.0 if s_scale is None else s_scale
+
         output_states = ()
 
         for content_attn, resnet, style_attn in zip(self.content_attentions, self.resnets, self.style_attentions):
-            
-            # content
-            current_content_feature = encoder_hidden_states[1][index]
-            hidden_states = content_attn(hidden_states, current_content_feature)
-            
-            # t_embed
+            # content injection (c_scale=0: skip)
+            if c_scale != 0:
+                current_content_feature = encoder_hidden_states[1][index] * c_scale
+                hidden_states = content_attn(hidden_states, current_content_feature)
+            # else: skip content injection
+
             hidden_states = resnet(hidden_states, temb)
 
-            # style
-            current_style_feature = encoder_hidden_states[0]
-            batch_size, channel, height, width = current_style_feature.shape
-            current_style_feature = current_style_feature.permute(0, 2, 3, 1).reshape(batch_size, height*width, channel)
-            hidden_states = style_attn(hidden_states, context=current_style_feature)
+            # style injection (s_scale=0: skip)
+            if s_scale != 0:
+                current_style_feature = encoder_hidden_states[0]
+                batch_size, channel, height, width = current_style_feature.shape
+                current_style_feature = current_style_feature.permute(0, 2, 3, 1).reshape(batch_size, height * width, channel) * s_scale
+                hidden_states = style_attn(hidden_states, context=current_style_feature)
+            # else: skip style injection
 
             output_states += (hidden_states,)
 
@@ -539,27 +553,27 @@ class StyleRSIUpBlock2D(nn.Module):
         temb=None,
         encoder_hidden_states=None,
         upsample_size=None,
+        s_scale=None,
     ):
+        s_scale = 1.0 if s_scale is None else s_scale
         total_offset = 0
 
-        style_content_feat = style_structure_features[-self.upblock_index-2]
+        style_content_feat = style_structure_features[-self.upblock_index - 2]
 
-        for i, (sc_inter_offset, dcn_deform, resnet, attn) in \
-            enumerate(zip(self.sc_interpreter_offsets, self.dcn_deforms, self.resnets, self.attentions)):
-            # pop res hidden states 
+        for i, (sc_inter_offset, dcn_deform, resnet, attn) in enumerate(
+            zip(self.sc_interpreter_offsets, self.dcn_deforms, self.resnets, self.attentions)
+        ):
             res_hidden_states = res_hidden_states_tuple[-1]
             res_hidden_states_tuple = res_hidden_states_tuple[:-1]
-            
-            # Skip Style Content Interpreter by DCN
+
+            # DCN structure alignment: always on (not controlled by s_scale)
             offset = sc_inter_offset(res_hidden_states, style_content_feat)
             offset = offset.contiguous()
-            # offset sum
             offset_sum = torch.mean(torch.abs(offset))
             total_offset += offset_sum
 
             res_hidden_states = res_hidden_states.contiguous()
             res_hidden_states = dcn_deform(res_hidden_states, offset)
-            # concat as input
             hidden_states = torch.cat([hidden_states, res_hidden_states], dim=1)
 
             if self.training and self.gradient_checkpointing:
@@ -576,7 +590,11 @@ class StyleRSIUpBlock2D(nn.Module):
                 )
             else:
                 hidden_states = resnet(hidden_states, temb)
-                hidden_states = attn(hidden_states, context=encoder_hidden_states)
+                # Style CrossAttn only (s_scale=0: skip CrossAttn)
+                if s_scale != 0:
+                    scaled_context = encoder_hidden_states * s_scale
+                    hidden_states = attn(hidden_states, context=scaled_context)
+                # else: skip style CrossAttn
 
         if self.upsamplers is not None:
             for upsampler in self.upsamplers:

@@ -200,6 +200,8 @@ class UNet(ModelMixin, ConfigMixin):
         encoder_hidden_states: torch.Tensor,
         content_encoder_downsample_size: int = 4,
         return_dict: bool = False,
+        content_scales: Optional[Tuple[float, ...]] = None,
+        style_scales: Optional[Tuple[float, ...]] = None,
     ) -> Union[UNetOutput, Tuple]:
         # By default samples have to be AT least a multiple of the overall upsampling factor.
         # The overall upsampling factor is equal to 2 ** (# num of upsampling layears).
@@ -237,28 +239,38 @@ class UNet(ModelMixin, ConfigMixin):
         # 2. pre-process
         sample = self.conv_in(sample)
 
+        # content_scales [s0,s1,s2] -> Down1, Down2, Mid; style_scales [s0..s4] -> Down1, Down2, Mid, Up1, Up2
+        c_sc = content_scales if content_scales is not None else (1.0, 1.0, 1.0)
+        s_sc = style_scales if style_scales is not None else (1.0, 1.0, 1.0, 1.0, 1.0)
+
         # 3. down
         down_block_res_samples = (sample,)
         for index, downsample_block in enumerate(self.down_blocks):
             if (hasattr(downsample_block, "attentions") and downsample_block.attentions is not None) or hasattr(downsample_block, "content_attentions"):
+                c_scale = c_sc[index - 1] if 1 <= index <= 2 else None
+                s_scale = s_sc[index - 1] if 1 <= index <= 2 else None
                 sample, res_samples = downsample_block(
                     hidden_states=sample,
                     temb=emb,
                     encoder_hidden_states=encoder_hidden_states,
                     index=index,
+                    c_scale=c_scale,
+                    s_scale=s_scale,
                 )
             else:
-                sample, res_samples = downsample_block(hidden_states=sample, temb=emb)   
+                sample, res_samples = downsample_block(hidden_states=sample, temb=emb)
 
             down_block_res_samples += res_samples
 
         # 4. mid
         if self.mid_block is not None:
             sample = self.mid_block(
-                sample, 
-                emb, 
+                sample,
+                emb,
                 index=content_encoder_downsample_size,
-                encoder_hidden_states=encoder_hidden_states
+                encoder_hidden_states=encoder_hidden_states,
+                c_scale=c_sc[2],
+                s_scale=s_sc[2],
             )
 
         # 5. up
@@ -269,18 +281,18 @@ class UNet(ModelMixin, ConfigMixin):
             res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
             down_block_res_samples = down_block_res_samples[: -len(upsample_block.resnets)]
 
-            # if we have not reached the final block and need to forward the
-            # upsample size, we do it here
             if not is_final_block and forward_upsample_size:
                 upsample_size = down_block_res_samples[-1].shape[2:]
 
             if (hasattr(upsample_block, "attentions") and upsample_block.attentions is not None) or hasattr(upsample_block, "content_attentions"):
+                s_scale = s_sc[3] if i == 1 else (s_sc[4] if i == 2 else None)
                 sample, offset_out = upsample_block(
                     hidden_states=sample,
                     temb=emb,
                     res_hidden_states_tuple=res_samples,
                     style_structure_features=encoder_hidden_states[3],
                     encoder_hidden_states=encoder_hidden_states[2],
+                    s_scale=s_scale,
                 )
                 offset_out_sum += offset_out
             else:
