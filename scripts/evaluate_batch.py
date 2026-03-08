@@ -84,12 +84,18 @@ def build_tasks(data_root, style_char):
     target_dir = os.path.join(data_root, "TargetImage")
     contents = collect_content_images(content_dir)
     styles = collect_styles(target_dir)
+    print(f"[DEBUG] build_tasks: {len(contents)} contents, {len(styles)} styles -> up to {len(contents)*len(styles)} pairs to check")
     if not contents or not styles:
         return []
 
     tasks = []
+    total_pairs = len(contents) * len(styles)
+    checked = 0
     for content_name, content_path in contents:
         for style_name in styles:
+            checked += 1
+            if checked % 10000 == 0 or checked == total_pairs:
+                print(f"[DEBUG] build_tasks progress: {checked}/{total_pairs} pairs checked, {len(tasks)} valid so far")
             style_dir = os.path.join(target_dir, style_name)
             gt_path = find_gt_path(style_dir, style_name, content_name)
             if gt_path is None:
@@ -163,16 +169,23 @@ def run():
     # Load pipeline
     print("Loading pipeline...")
     pipe = load_fontdiffuer_pipeline(args=args)
+    print("[DEBUG] Pipeline loaded, building transforms...")
     content_tf, style_tf = get_transforms(content_size, style_size)
 
     # Build tasks
+    content_dir = os.path.join(DATA_ROOT, "ContentImage")
+    target_dir = os.path.join(DATA_ROOT, "TargetImage")
+    print(f"[DEBUG] DATA_ROOT={os.path.abspath(DATA_ROOT)}, cwd={os.getcwd()}")
+    print(f"[DEBUG] Content dir exists: {os.path.isdir(content_dir)}, Target dir exists: {os.path.isdir(target_dir)}")
+    print("[DEBUG] Building tasks (may take a while for large datasets)...")
     tasks = build_tasks(DATA_ROOT, STYLE_CHAR)
-    print(f"Total tasks (with GT): {len(tasks)}")
+    print(f"[DEBUG] Total tasks (with GT): {len(tasks)}")
     if not tasks:
         print("No tasks to run. Exiting.")
         return
 
     # Process in batches
+    print(f"[DEBUG] Starting inference, {len(tasks)} tasks in batches of {INFERENCE_BATCH_SIZE}")
     for i in range(0, len(tasks), INFERENCE_BATCH_SIZE):
         batch = tasks[i:i + INFERENCE_BATCH_SIZE]
         content_tensors = []
