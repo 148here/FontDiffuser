@@ -21,9 +21,9 @@ from sample import load_fontdiffuer_pipeline
 from configs.fontdiffuser import get_parser
 
 # ============ Config (edit these) ============
-DATA_ROOT = "data_examples/train"
-CKPT_DIR = "ckpt"
-OUTPUT_DIR = "outputs/eval_batch"
+DATA_ROOT = "/root/autodl-tmp/data/test"
+CKPT_DIR = "/root/workspace/ckpt/ckpt"
+OUTPUT_DIR = "/root/autodl-tmp/output/batch1"
 INFERENCE_BATCH_SIZE = 4
 SAVE_RESULT = True
 SAVE_COMPARE = True
