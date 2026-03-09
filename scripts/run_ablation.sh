@@ -5,13 +5,13 @@
 # ============================================================
 # Path configuration (edit these)
 # ============================================================
-CKPT_DIR="ckpt/"
-CONTENT_IMAGE="data_examples/sampling/example_content.jpg"
-STYLE_IMAGE="data_examples/sampling/example_style.jpg"
-GT_IMAGE="data_examples/sampling/example_gt.jpg"  # Target font reference (ground truth)
-OUTPUT_BASE="./ablation_results"
+CKPT_DIR="/root/workspace/ckpt/ckpt"
+CONTENT_IMAGE="/root/autodl-tmp/data/test/ContentImage/源.jpg"
+STYLE_IMAGE="/root/autodl-tmp/data/test/TargetImage/HYChangYiTiF/HYChangYiTiF+阿.jpg"
+GT_IMAGE="/root/autodl-tmp/data/test/TargetImage/HYChangYiTiF/HYChangYiTiF+源.jpg"  # Target font reference (ground truth)
+OUTPUT_BASE="/root/autodl-tmp/output/ablation_layers/test1/xi/final_set_01"
 DEVICE="cuda:0"
-NUM_RUNS=3
+NUM_RUNS=8
 SEED=42
 
 # ============================================================
@@ -23,14 +23,14 @@ SEED=42
 
 # Experiment (1): Content ablation (enable content only at one position, disable all style)
 # "Only inject at position 0", "only at 1", "only at 2"
-CONTENT_CONFIGS=("1,0,0" "0,1,0" "0,0,1")
-STYLE_DISABLED="0,0,0,0,0"
-CONTENT_ABLATION_NAMES=("pos0_down1" "pos1_down2" "pos2_mid")
+CONTENT_CONFIGS=("1,1,1" "0,1,1" "1,0,1" "1,1,0")
+STYLE_DISABLED="1,1,1,1,1"
+CONTENT_ABLATION_NAMES=("noraml" "pos0_down1" "pos1_down2" "pos2_mid")
 
 # Experiment (2): Style ablation (enable style only at one position, disable all content)
-STYLE_CONFIGS=("1,0,0,0,0" "0,1,0,0,0" "0,0,1,0,0" "0,0,0,1,0" "0,0,0,0,1")
-CONTENT_DISABLED="0,0,0"
-STYLE_ABLATION_NAMES=("pos0_down1" "pos1_down2" "pos2_mid" "pos3_up1" "pos4_up2")
+STYLE_CONFIGS=("1,1,1,1,1" "0,1,1,1,1" "1,0,1,1,1" "1,1,0,1,1" "1,1,1,0,1" "1,1,1,1,0")
+CONTENT_DISABLED="1,1,1"
+STYLE_ABLATION_NAMES=("normal" "pos0_down1" "pos1_down2" "pos2_mid" "pos3_up1" "pos4_up2")
 
 # Sampling / model args (optional overrides)
 NUM_INFERENCE_STEPS=20

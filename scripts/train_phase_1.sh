@@ -1,8 +1,8 @@
 accelerate launch train.py \
     --seed=123 \
     --experience_name="FontDiffuser_training_phase_1" \
-    --data_root="data_examples" \
-    --output_dir="outputs/FontDiffuser" \
+    --data_root="/root/autodl-tmp/data" \
+    --output_dir="/root/autodl-tmp/output/train/1" \
     --report_to="tensorboard" \
     --resolution=96 \
     --style_image_size=96 \
@@ -11,16 +11,18 @@ accelerate launch train.py \
     --channel_attn=True \
     --content_start_channel=64 \
     --style_start_channel=64 \
-    --train_batch_size=16 \
+    --train_batch_size=18 \
     --perceptual_coefficient=0.01 \
     --offset_coefficient=0.5 \
-    --max_train_steps=440000 \
-    --ckpt_interval=40000 \
+    --max_train_steps=44000 \
+    --ckpt_interval=11000 \
     --gradient_accumulation_steps=1 \
-    --log_interval=50 \
-    --learning_rate=1e-4 \
+    --log_interval=25 \
+    --learning_rate=1e-5 \
     --lr_scheduler="linear" \
-    --lr_warmup_steps=10000 \
+    --lr_warmup_steps=1000 \
     --drop_prob=0.1 \
-    --mixed_precision="no"
+    --mixed_precision="no" \
+    --resume_from_checkpoint "/root/workspace/ckpt/ckpt" \
+    --resume_global_step 0
     

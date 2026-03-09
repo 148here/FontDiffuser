@@ -202,14 +202,14 @@ def main():
     parser.add_argument("--content_image_path", type=str, required=True)
     parser.add_argument("--style_image_path", type=str, required=True)
     parser.add_argument("--gt_image_path", type=str, required=True)
-    parser.add_argument("--output_dir", type=str, required=True)
+    # parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--content_scales", type=str, required=True,
                         help="Comma-separated, length 3: [Down1, Down2, Mid]. 0=disable, 1=full.")
     parser.add_argument("--style_scales", type=str, required=True,
                         help="Comma-separated, length 5: [Down1, Down2, Mid, Up1, Up2]. 0=disable, 1=full.")
     parser.add_argument("--num_runs", type=int, default=1)
     parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--seed", type=int, default=None)
+    # parser.add_argument("--seed", type=int, default=None)
 
     args = parser.parse_args()
     run_ablation(args)

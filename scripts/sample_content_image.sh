@@ -1,12 +1,12 @@
 python sample.py \
-    --ckpt_dir="ckpt/" \
-    --content_image_path="data_examples/sampling/example_content.jpg" \
-    --style_image_path="data_examples/sampling/example_style.jpg" \
+    --ckpt_dir="/root/workspace/ckpt/ckpt" \
+    --content_image_path="/root/autodl-tmp/data/test/ContentImage/专.jpg" \
+    --style_image_path="/root/autodl-tmp/data/test/TargetImage/HYJiangNanKaiSongW/HYJiangNanKaiSongW+中.jpg" \
     --save_image \
-    --save_image_dir="outputs/" \
+    --save_image_dir="/root/autodl-tmp/output/ablation_decouple/test2/zhuan/2" \
     --device="cuda:0" \
     --algorithm_type="dpmsolver++" \
     --guidance_type="classifier-free" \
-    --guidance_scale=7.5 \
+    --guidance_scale=9.5 \
     --num_inference_steps=20 \
     --method="multistep"
