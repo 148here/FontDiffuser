@@ -74,7 +74,20 @@ def main():
     style_encoder = build_style_encoder(args=args)
     content_encoder = build_content_encoder(args=args)
     noise_scheduler = build_ddpm_scheduler(args)
-    if args.phase_2:
+    
+    # Handle resuming from checkpoint or loading phase 1 weights
+    checkpoint_path = None
+    if args.resume_from_checkpoint:
+        if os.path.isabs(args.resume_from_checkpoint):
+            checkpoint_path = args.resume_from_checkpoint
+        else:
+            checkpoint_path = f"{args.output_dir}/{args.resume_from_checkpoint}"
+        
+        logger.info(f"Resuming training from checkpoint: {checkpoint_path}")
+        unet.load_state_dict(torch.load(f"{checkpoint_path}/unet.pth"), strict=False)
+        style_encoder.load_state_dict(torch.load(f"{checkpoint_path}/style_encoder.pth"), strict=False)
+        content_encoder.load_state_dict(torch.load(f"{checkpoint_path}/content_encoder.pth"), strict=False)
+    elif args.phase_2:
         unet.load_state_dict(torch.load(f"{args.phase_1_ckpt_dir}/unet.pth"))
         style_encoder.load_state_dict(torch.load(f"{args.phase_1_ckpt_dir}/style_encoder.pth"))
         content_encoder.load_state_dict(torch.load(f"{args.phase_1_ckpt_dir}/content_encoder.pth"))
@@ -139,6 +152,18 @@ def main():
     # Accelerate preparation
     model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, lr_scheduler)
+        
+    # Load optimizer and scheduler states if resuming
+    if args.resume_from_checkpoint:
+        optimizer_path = f"{checkpoint_path}/optimizer.pth"
+        if os.path.exists(optimizer_path):
+            optimizer.load_state_dict(torch.load(optimizer_path))
+            print(f"Loaded optimizer state from {optimizer_path}")
+        
+        scheduler_path = f"{checkpoint_path}/scheduler.pth"
+        if os.path.exists(scheduler_path):
+            lr_scheduler.load_state_dict(torch.load(scheduler_path))
+            print(f"Loaded scheduler state from {scheduler_path}")
     ## move scr module to the target deivces
     if args.phase_2:
         scr = scr.to(accelerator.device)
@@ -148,18 +173,49 @@ def main():
         accelerator.init_trackers(args.experience_name)
         save_args_to_yaml(args=args, output_file=f"{args.output_dir}/{args.experience_name}_config.yaml")
 
+    # Determine global step to resume from
+    resume_global_step = 0
+    if args.resume_from_checkpoint:
+        if args.resume_global_step is not None:
+            resume_global_step = args.resume_global_step
+            print(f"Using manually specified global step: {resume_global_step}")
+        else:
+            try:
+                # Try to extract global step from checkpoint path (e.g. 'global_step_40000')
+                dir_name = os.path.basename(checkpoint_path.rstrip('/\\'))
+                if 'global_step_' in dir_name:
+                    resume_global_step = int(dir_name.split('global_step_')[-1])
+                else:
+                    resume_global_step = 0
+            except ValueError:
+                resume_global_step = 0
+        
+        print(f"Resuming training from global step {resume_global_step}")
+
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar.set_description("Steps")
+    if resume_global_step > 0:
+        progress_bar.update(resume_global_step)
 
     # Convert to the training epoch
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
-    global_step = 0
-    for epoch in range(num_train_epochs):
+    global_step = resume_global_step
+    
+    # Calculate starting epoch and step
+    first_epoch = global_step // num_update_steps_per_epoch
+    resume_step = global_step % num_update_steps_per_epoch
+
+    for epoch in range(first_epoch, num_train_epochs):
         train_loss = 0.0
         for step, samples in enumerate(train_dataloader):
+            # Skip steps until we reach the resumed step in the first epoch
+            if epoch == first_epoch and step < resume_step * args.gradient_accumulation_steps:
+                if step % args.gradient_accumulation_steps == 0:
+                    pass # skipping
+                continue
             model.train()
             content_images = samples["content_image"]
             style_images = samples["style_image"]
@@ -254,6 +310,11 @@ def main():
                         torch.save(model.style_encoder.state_dict(), f"{save_dir}/style_encoder.pth")
                         torch.save(model.content_encoder.state_dict(), f"{save_dir}/content_encoder.pth")
                         torch.save(model, f"{save_dir}/total_model.pth")
+                        
+                        # Save optimizer and scheduler states
+                        torch.save(optimizer.state_dict(), f"{save_dir}/optimizer.pth")
+                        torch.save(lr_scheduler.state_dict(), f"{save_dir}/scheduler.pth")
+                        
                         logging.info(f"[{time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))}] Save the checkpoint on global step {global_step}")
                         print("Save the checkpoint on global step {}".format(global_step))
 

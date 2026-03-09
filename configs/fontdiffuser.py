@@ -34,6 +34,11 @@ def get_parser():
     # Training
     parser.add_argument("--phase_2", action="store_true", help="Training in phase 2 using SCR module.")
     parser.add_argument("--phase_1_ckpt_dir", type=str, default=None, help="The trained ckpt directory during phase 1.")
+    
+    ## Resume training
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Resume training from a checkpoint directory. Can be relative (e.g., 'global_step_40000') or absolute path.")
+    parser.add_argument("--resume_global_step", type=int, default=None, help="Manual override for global step when resuming. If not specified, will try to extract from checkpoint directory name.")
+    
     ## SCR
     parser.add_argument("--temperature", type=float, default=0.07)
     parser.add_argument("--mode", type=str, default="refinement")
